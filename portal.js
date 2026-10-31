@@ -110,7 +110,19 @@ el('admin-upload').onsubmit = async event => {
   event.preventDefault(); if (busy) return; busy = true; lockAdmin(true);
   try {
     const files = [...el('release-files').files];
-    if (!files.some(f => /^(update|base)-index\.json$/.test(f.name))) throw Error('서명된 배포 정보 JSON도 함께 선택해 주세요.');
+    const indexes = files.filter(f => /^(update|base)-index\.json$/.test(f.name));
+    if (!indexes.length) throw Error('서명된 배포 정보 JSON도 함께 선택해 주세요.');
+    for (const index of indexes) {
+      if (index.size > 1500000) throw Error('배포 정보 JSON이 너무 큽니다.');
+      const metadata = JSON.parse(await index.text()).metadata;
+      const expected = [...(metadata.patches || []), ...(metadata.base ? [metadata.base] : [])];
+      if (!expected.length) throw Error('배포 정보의 파일 목록을 확인해 주세요.');
+      for (const entry of expected) {
+        const file = files.find(f => f.name === entry.name);
+        if (!file) throw Error(entry.name + '도 함께 선택해 주세요. 파일 선택 창에서 Ctrl을 누르고 여러 파일을 고를 수 있어요.');
+        if (file.size !== entry.bytes) throw Error(entry.name + '의 크기가 배포 정보와 다릅니다. 같은 폴더에서 생성된 파일을 선택해 주세요.');
+      }
+    }
     const version = el('release-version').value.trim(), notes = el('release-notes').value.trim();
     if (draft && draft.version !== version) throw Error('기존 초안 업로드를 먼저 마치거나 GitHub에서 확인해 주세요.');
     if (!draft) { el('admin-status').textContent = '배포 초안을 만들고 있어요.'; draft = { ...(await api('/admin/releases', { version, notes }, true)), version, uploaded: new Set() }; }
