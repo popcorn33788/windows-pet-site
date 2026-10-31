@@ -26,7 +26,7 @@ async function api(route, body, admin = false, raw = false) {
   return result;
 }
 function leave() {
-  viewer = ''; sessionStorage.removeItem('pet-release-viewer'); el('content').hidden = true; el('entrance').hidden = false; el('viewer-exit').hidden = true; el('history-link').hidden = true;
+  viewer = ''; sessionStorage.removeItem('pet-release-viewer'); el('content').hidden = true; el('entrance').hidden = false; el('viewer-exit').hidden = true; el('history-link').hidden = true; el('admin-open').hidden = true; el('admin-dialog').close();
 }
 async function download(file, status = el('page-status')) {
   if (busy) return; busy = true; status.textContent = '다운로드 링크를 준비하고 있어요.';
@@ -59,14 +59,14 @@ function render() {
     const right = document.createElement('div'); right.className = 'history-detail';
     const notes = document.createElement('p'); notes.textContent = release.notes || '업데이트 내용이 등록되지 않았습니다.'; right.append(notes);
     const files = document.createElement('div'); files.className = 'file-actions';
-    for (const file of release.files.filter(f => /\.(zip|petupdate)$/.test(f.name))) {
+    for (const file of release.files.filter(f => /\.petupdate$/.test(f.name))) {
       const button = document.createElement('button'); button.type = 'button';
       const label=file.name.endsWith('.petupdate')?'업데이트 파일':'프로그램';
       button.textContent=label+' 받기 · '+size(file.bytes);button.title=file.name;button.onclick = () => download(file); files.append(button);
     }
     right.append(files); article.append(left, right); list.append(article);
   }
-  el('content').hidden = false; el('entrance').hidden = true; el('viewer-exit').hidden = false; el('history-link').hidden = false;
+  el('content').hidden = false; el('entrance').hidden = true; el('viewer-exit').hidden = false; el('history-link').hidden = false; el('admin-open').hidden = false;
 }
 async function refresh() { releases = (await api('/catalog')).releases; render(); }
 el('entrance-form').onsubmit = async event => {
