@@ -1,5 +1,5 @@
 const el = id => document.getElementById(id);
-let config, viewer = sessionStorage.getItem('pet-release-viewer') || '', adminToken = '', configured = true, releases = [], busy = false, draft = null;
+let config, viewer = sessionStorage.getItem('pet-release-viewer') || '', adminToken = '', configured = true, releases = [], busy = false, draft = null, releaseNotes = {};
 const size = bytes => bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + 'MB' : Math.ceil(bytes / 1024) + 'KB';
 const date = value => value ? new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }) : '';
 function compareVersion(a, b) {
@@ -59,9 +59,9 @@ function render() {
     const right = document.createElement('div'); right.className = 'history-detail';
     const notes = document.createElement('p'); notes.textContent = release.notes || '업데이트 내용이 등록되지 않았습니다.'; right.append(notes);
     const files = document.createElement('div'); files.className = 'file-actions';
-    for (const file of release.files.filter(f => /\.(zip|petupdate|petpack)$/.test(f.name))) {
+    for (const file of release.files.filter(f => /\.(zip|petupdate)$/.test(f.name))) {
       const button = document.createElement('button'); button.type = 'button';
-      const label=file.name.endsWith('.petupdate')?'업데이트 파일':file.name.endsWith('.petpack')?'캐릭터팩':'프로그램';
+      const label=file.name.endsWith('.petupdate')?'업데이트 파일':'프로그램';
       button.textContent=label+' 받기 · '+size(file.bytes);button.title=file.name;button.onclick = () => download(file); files.append(button);
     }
     right.append(files); article.append(left, right); list.append(article);
@@ -81,6 +81,7 @@ el('admin-dialog').addEventListener('cancel', event => { if (busy) event.prevent
 function adminView(mode) {
   for (const id of ['admin-login', 'admin-setup', 'admin-upload']) el(id).hidden = id !== mode;
   el('admin-logout').hidden = !adminToken;
+  el('admin-maintenance').hidden = mode !== 'admin-upload';
 }
 function lockAdmin(value) { for (const item of el('admin-dialog').querySelectorAll('button,input,textarea')) item.disabled = value; }
 el('admin-login').onsubmit = async event => {
@@ -104,7 +105,11 @@ el('admin-setup').onsubmit = async event => {
 el('release-files').onchange = async () => {
   if (draft) return;
   const index = [...el('release-files').files].find(f => /^(update|base)-index\.json$/.test(f.name));
-  if (index && index.size < 1500000) { try { el('release-version').value = JSON.parse(await index.text()).metadata.version; } catch { /* User can correct the version. */ } }
+  if (index && index.size < 1500000) { try {
+    const metadata = JSON.parse(await index.text()).metadata;
+    el('release-version').value = metadata.version;
+    el('release-notes').value = metadata.notes || releaseNotes[metadata.version] || '';
+  } catch { /* User can correct the version and notes. */ } }
 };
 el('admin-upload').onsubmit = async event => {
   event.preventDefault(); if (busy) return; busy = true; lockAdmin(true);
@@ -138,10 +143,20 @@ el('admin-upload').onsubmit = async event => {
   } catch (error) { el('admin-status').textContent = error.message + (draft ? ' 업로드한 초안은 GitHub에 보관됩니다.' : ''); }
   finally { busy = false; lockAdmin(false); }
 };
-el('admin-logout').onclick = () => { if (busy) return; adminToken = ''; draft = null; adminView('admin-login'); el('admin-status').textContent = ''; };
+el('token-replace').onsubmit = async event => {
+  event.preventDefault(); if (busy) return; busy = true; lockAdmin(true);
+  el('admin-status').textContent = '새 연동 키를 확인하고 있어요.';
+  try {
+    await api('/admin/github-token', { githubToken: el('replacement-token').value.trim() }, true);
+    el('replacement-token').value = ''; el('admin-status').textContent = '연동 키를 교체했습니다. 기존 입장 비밀번호와 배포 파일은 그대로입니다.';
+  } catch (error) { el('admin-status').textContent = error.message; }
+  finally { busy = false; lockAdmin(false); }
+};
+el('admin-logout').onclick = () => { if (busy) return; adminToken = ''; draft = null; el('replacement-token').value = ''; adminView('admin-login'); el('admin-status').textContent = ''; };
 async function initialize() {
   try {
     const response = await fetch('config.json'); if (!response.ok) throw Error('배포 연결을 준비하고 있습니다.'); config = await response.json();
+    try { const notes = await fetch('release-notes.json'); if (notes.ok) releaseNotes = await notes.json(); } catch { /* Signed future indexes carry their own notes. */ }
     const status = await api('/status'); configured = status.configured;
     if (!configured) el('entrance-status').textContent = '관리자의 최초 설정을 기다리고 있어요.';
     else if (viewer) { try { await refresh(); } catch { leave(); } }
