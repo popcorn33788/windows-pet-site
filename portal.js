@@ -40,7 +40,6 @@ function render() {
   releases.sort((a, b) => compareVersion(b.version, a.version));
   const latest = releases[0];
   el('latest-title').textContent = latest?.version || '준비 중';
-  document.querySelector('.badge').hidden = !latest?.version.includes('-');
   el('latest-note').textContent = latest?.notes.split('\n').find(Boolean)?.slice(0, 140) || '새 버전을 준비하고 있습니다.';
   el('latest-date').textContent = date(latest?.date);
   // A newer delta may use the most recent compatible full base.
